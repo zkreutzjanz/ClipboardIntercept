@@ -5,6 +5,7 @@
         "xstring": "cpp",
         "stdexcept": "cpp",
         "exception": "cpp",
-        "memory": "cpp"
+        "memory": "cpp",
+        "string": "cpp"
     }
 }

@@ -151,12 +151,12 @@ class clipboardSnip{
             return true;
         };
         void print(string offset){
-            cout<<offset<<name<<":\n";
+            cout<<offset<<"-"<<name<<"-:\n";
             printBytes(data,dataLength,offset);
             
         }
         void printName(string offset){
-            cout<<offset<<name<<":\n";
+            cout<<offset<<"-"<<name<<"-\n";
         }
 
 };
@@ -183,12 +183,14 @@ class clipboardContents{
                 cout<<"\n";
                 snip.print(offset);
             }
+            if(!snips.size()) cout<<offset<<"~NO DATA~\n";
         }
 
         void printNames(string offset){
             for(clipboardSnip snip : snips){
                 snip.printName(offset);
             }
+            if(!snips.size()) cout<<offset<<"~NO DATA~\n";
         }
 
         void clear(){
@@ -226,16 +228,22 @@ class clipboard{
 
             currentSnip.setName(currentFormatName,sizeof(currentFormatBuffer));
             HANDLE h = GetClipboardData(currentFormat);
+            if(h==NULL) throw runtime_error("Get_Clipboard_Data_ERROR:"+to_string((unsigned int)GetLastError()));
 		    unsigned char* p = (unsigned char*)GlobalLock(h);
+            if(p==0) throw runtime_error("Global_Lock_ERROR:"+to_string((unsigned int)GetLastError()));
             GlobalUnlock(h);
             try{
+
+                
+
+                
                 if(!currentSnip.setData(p,GlobalSize(h)))
                     throw runtime_error("Cannot add this data to snip");
                 
                 if(!_clipboardContents.addClipboardSnip(currentSnip))
                     throw runtime_error("Cannot add snip to contents");
             }catch(exception e){
-                cout<<"ERROR:"<<currentSnip.name<<":"<<e.what()<<"\n";
+                cout<<"Get_Clipboard_Data_ERROR: On Format"<<currentSnip.name<<":"<<e.what()<<"\n";
                 
             }
             currentFormat = EnumClipboardFormats(currentFormat);
@@ -243,6 +251,7 @@ class clipboard{
         }
         if(!CloseClipboard())
             throw runtime_error("Cannot close Clipboard");
+        
         return _clipboardContents;
     }
 
@@ -282,7 +291,7 @@ class clipboard{
             
 
             }catch(exception e){
-                cout<<"ERROR:"<<snip.name<<":"<<e.what()<<"\n";
+                cout<<"Set_Clipboard_Data_ERROR:"<<snip.name<<":"<<e.what()<<"\n";
             }
 
 
@@ -298,18 +307,13 @@ class clipboard{
 int main(){
     clipboard cb;
     clipboardContents cc =  cb.getClipboardData();
-    
-    cc.printNames("CC Check 1:  ");
-
     cb.clearClipboardData();
-
-    cc.printNames("CC Check 2:  ");
+    cc.printNames("CC Saved Value Check:  ");
+    cb.getClipboardData().printNames("CC System Clipboard Check:");
 
     cb.setClipBoardData(cc);
 
-    cc.printNames("CC Check 3:  ");
-
-    cb.getClipboardData().printNames("Final Check: ");
+    cb.getClipboardData().printNames("CC Rebuilt Clipboad Check: ");
     
 }
 /**
