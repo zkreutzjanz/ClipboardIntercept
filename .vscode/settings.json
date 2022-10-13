@@ -6,6 +6,8 @@
         "stdexcept": "cpp",
         "exception": "cpp",
         "memory": "cpp",
-        "string": "cpp"
+        "string": "cpp",
+        "iostream": "cpp",
+        "ostream": "cpp"
     }
 }

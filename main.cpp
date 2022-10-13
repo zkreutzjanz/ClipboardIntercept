@@ -7,6 +7,8 @@
 #include <cmath>
 #include <math.h>
 
+
+#include <memory>
 #include <windows.h>
 using namespace std;
 UINT uFormat = (UINT)(-1); 
@@ -198,6 +200,38 @@ class clipboardContents{
         }
 };
 
+
+//taken from SO somewhere\/
+string GetErrorMessage(DWORD dwErrorCode)
+{
+    LPTSTR psz{ nullptr };
+    const DWORD cchMsg = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM
+                                         | FORMAT_MESSAGE_IGNORE_INSERTS
+                                         | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+                                       NULL, // (not used with FORMAT_MESSAGE_FROM_SYSTEM)
+                                       dwErrorCode,
+                                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                                       reinterpret_cast<LPTSTR>(&psz),
+                                       0,
+                                       NULL);
+    if (cchMsg > 0)
+    {
+        // Assign buffer to smart pointer with custom deleter so that memory gets released
+        // in case String's c'tor throws an exception.
+        auto deleter = [](void* p) { ::LocalFree(p); };
+        std::unique_ptr<TCHAR, decltype(deleter)> ptrBuffer(psz, deleter);
+        string st;
+        
+        return string((const char *)ptrBuffer.get(), cchMsg);
+    }
+    else
+    {
+        auto error_code{ ::GetLastError() };
+        throw std::system_error( error_code, std::system_category(),
+                                 "Failed to retrieve error message string.");
+    }
+}
+
 class clipboard{
     private:
     
@@ -210,8 +244,7 @@ class clipboard{
     clipboardContents getClipboardData(){
         clipboardContents _clipboardContents;
 
-        if(!OpenClipboard(NULL))
-           throw runtime_error("Cannot open Clipboard");
+        if(!OpenClipboard(NULL)) throw runtime_error("Cannot open Clipboard");
 
         unsigned int currentFormat = EnumClipboardFormats(0); 
 
@@ -220,59 +253,62 @@ class clipboard{
         while(currentFormat){
             clipboardSnip currentSnip;
 
-            if(GetClipboardFormatNameA(currentFormat,currentFormatBuffer,sizeof(currentFormatBuffer)))
-                currentFormatName = currentFormatBuffer;
-            else if(getClipboardStandardFormatName((unsigned int)currentFormat,currentFormatBuffer,sizeof(currentFormatBuffer)))
-                currentFormatName = currentFormatBuffer;
-            
-
-            currentSnip.setName(currentFormatName,sizeof(currentFormatBuffer));
-            HANDLE h = GetClipboardData(currentFormat);
-            if(h==NULL) throw runtime_error("Get_Clipboard_Data_ERROR:"+to_string((unsigned int)GetLastError()));
-		    unsigned char* p = (unsigned char*)GlobalLock(h);
-            if(p==0) throw runtime_error("Global_Lock_ERROR:"+to_string((unsigned int)GetLastError()));
-            GlobalUnlock(h);
             try{
+                if(GetClipboardFormatNameA(currentFormat,currentFormatBuffer,sizeof(currentFormatBuffer)))
+                    currentFormatName = currentFormatBuffer;
+                else if(getClipboardStandardFormatName((unsigned int)currentFormat,currentFormatBuffer,sizeof(currentFormatBuffer)))
+                    currentFormatName = currentFormatBuffer;
+                else throw runtime_error("No formatName found from currentFormat");;
 
+                currentSnip.setName(currentFormatName,sizeof(currentFormatBuffer));
                 
+                SetLastError(0);
+                HANDLE h = GetClipboardData(currentFormat);
+                DWORD err=GetLastError();
+                if(err) throw runtime_error("GetClipboardData(currentFormat) FAIL ::"+GetErrorMessage(err));
 
+                SetLastError(0);
+                unsigned char* p = (unsigned char*)GlobalLock(h);
+                err=GetLastError();
+                if(err) throw runtime_error("GlobalLock FAIL ::"+GetErrorMessage(err));
                 
-                if(!currentSnip.setData(p,GlobalSize(h)))
-                    throw runtime_error("Cannot add this data to snip");
+                SetLastError(0);
+                GlobalUnlock(h);
+                err=GetLastError();
+                if(err) throw runtime_error("GlobalUnLock FAIL ::"+GetErrorMessage(err));
                 
-                if(!_clipboardContents.addClipboardSnip(currentSnip))
-                    throw runtime_error("Cannot add snip to contents");
+                if(!currentSnip.setData(p,GlobalSize(h))) throw runtime_error("Cannot add this data to snip");
+                    
+                if(!_clipboardContents.addClipboardSnip(currentSnip)) throw runtime_error("Cannot add snip to contents");
+             
+                   
+                
+            }catch(runtime_error e){
+               cout<<"Format <"<<currentFormat<<"> :: get failure :: "<<e.what();
             }catch(exception e){
-                cout<<"Get_Clipboard_Data_ERROR: On Format"<<currentSnip.name<<":"<<e.what()<<"\n";
-                
+                cout<<"Format <"<<currentFormat<<"> :: get failure(NOT runtime):: "<<e.what();
             }
             currentFormat = EnumClipboardFormats(currentFormat);
             
         }
-        if(!CloseClipboard())
-            throw runtime_error("Cannot close Clipboard");
+        if(!CloseClipboard()) throw runtime_error("Cannot close Clipboard");
         
         return _clipboardContents;
     }
 
     void clearClipboardData(){
-        if(!OpenClipboard(NULL))
-            throw runtime_error("Cannot open Clipboard");
+        if(!OpenClipboard(NULL)) throw runtime_error("Cannot open Clipboard");
 
-        if(!EmptyClipboard())
-            throw runtime_error("Cannot empty Clipboard");
+        if(!EmptyClipboard()) throw runtime_error("Cannot empty Clipboard");
 
-        if(!CloseClipboard())
-           throw runtime_error("Cannot close Clipboard");
+        if(!CloseClipboard()) throw runtime_error("Cannot close Clipboard");
         
     }
 
     void setClipBoardData(clipboardContents _clipboardContents){
-        if(!OpenClipboard(NULL))
-           throw runtime_error("Cannot open Clipboard");
+        if(!OpenClipboard(NULL)) throw runtime_error("Cannot open Clipboard");
 
-        if(!EmptyClipboard())
-           throw runtime_error("Cannot empty Clipboard");
+        if(!EmptyClipboard()) throw runtime_error("Cannot empty Clipboard");
 
         for(clipboardSnip snip : _clipboardContents.snips){
             try{
@@ -284,14 +320,14 @@ class clipboard{
                     clipboardFormat = RegisterClipboardFormatA(snip.name);
             
                 HANDLE h = GlobalAlloc(GMEM_MOVEABLE,snip.dataLength);
-                memcpy(GlobalLock(h), snip.data, snip.dataLength);
+                LPVOID p = GlobalLock(h);
+                memcpy(p, snip.data, snip.dataLength);
                 GlobalUnlock(h);
-                if(!SetClipboardData(clipboardFormat,h))
-                    throw runtime_error("Cannot set Clipboard data");
+                if(!SetClipboardData(clipboardFormat,h)) throw runtime_error("Cannot set Clipboard data");
             
 
-            }catch(exception e){
-                cout<<"Set_Clipboard_Data_ERROR:"<<snip.name<<":"<<e.what()<<"\n";
+            }catch(runtime_error e){
+                cout<<"setClipBoardData():: Format Name <"<<snip.name<<"> :: ERROR :: "<<e.what()<<"\n";
             }
 
 
