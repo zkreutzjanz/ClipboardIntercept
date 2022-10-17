@@ -6,4 +6,4 @@ The current code will take the contents of the clipboard, save contents in selfm
 Minimal diagnostics are shown for this, it should be noted that some formatts cannot be saved, causing the contents of the clipboard to sometimes be slightly different. 
 This loss happens when handles are stored in the clipboard, some standard windows formatts are handles, making this frequent.
 ## References
-Author - Zach Kreutzjans
+Author - Zach Kreutzjans - leave Issue if any questions
